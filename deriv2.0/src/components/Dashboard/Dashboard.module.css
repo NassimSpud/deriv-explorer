@@ -1,0 +1,135 @@
+.dashboard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #1e1e1e;
+    color: white;
+    font-family: 'Arial', sans-serif;
+    padding: 20px;
+  }
+  
+  .header {
+    text-align: center;
+    margin-bottom: 30px;
+    width: 100%;
+    position: relative;
+  }
+  
+  .title {
+    font-size: 2rem;
+    margin-bottom: 8px;
+    color: #00ff88;
+  }
+  
+  .subtitle {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  
+  .logoutButton {
+    position: absolute;
+    top: 0;
+    right: 20px;
+    padding: 5px 15px;
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  
+  .logoutButton:hover {
+    background-color: #cc0000;
+  }
+  
+  .navTabs {
+    display: flex;
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #444;
+  }
+  
+  .tab {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    color: #aaa;
+    font-weight: bold;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-size: 1rem;
+  }
+  
+  .activeTab {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    color: #00ff88;
+    font-weight: bold;
+    cursor: pointer;
+    border-bottom: 2px solid #00ff88;
+    font-size: 1rem;
+  }
+  
+  .commissionContainer {
+    width: 100%;
+    max-width: 800px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .commissionCard {
+    margin-bottom: 20px;
+  }
+  
+  .commissionCard h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    color: #00ff88;
+  }
+  
+  .amount {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 5px 0;
+  }
+  
+  .currency {
+    color: #aaa;
+    margin: 5px 0;
+    font-size: 1rem;
+  }
+  
+  .transactions {
+    color: #aaa;
+    margin: 5px 0;
+    font-size: 1rem;
+  }
+  
+  .divider {
+    height: 1px;
+    background-color: #444;
+    margin: 20px 0;
+  }
+  
+  .loading {
+    color: #00ff88;
+    font-size: 1.2rem;
+    margin-top: 50px;
+    text-align: center;
+  }
+  
+  .error {
+    color: #ff4444;
+    font-size: 1.2rem;
+    margin-top: 50px;
+    text-align: center;
+  }
