@@ -8,63 +8,33 @@ const Login = () => {
   const [showToken, setShowToken] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [connectionTimeout, setConnectionTimeout] = useState(null);
   const navigate = useNavigate();
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (connectionTimeout) {
-        clearTimeout(connectionTimeout);
-      }
-    };
-  }, [connectionTimeout]);
-
   const verifyDerivToken = async (token) => {
-    return new Promise((resolve, reject) => {
-      // Set a connection timeout (8 seconds)
-      const timeout = setTimeout(() => {
-        reject(new Error('Connection timeout. Please check your network.'));
-      }, 8000);
-      setConnectionTimeout(timeout);
+    try {
+      const response = await fetch('https://oauth.deriv.com/oauth2/authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          token
+        })
+      });
 
-      // Use the binary API endpoint instead of websockets
-      const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Failed to verify token');
+      }
 
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        ws.send(JSON.stringify({ verify: token }));
-      };
-
-      ws.onmessage = (e) => {
-        clearTimeout(timeout);
-        try {
-          const data = JSON.parse(e.data);
-          ws.close();
-          if (data.error) {
-            reject(new Error(data.error.message));
-          } else {
-            resolve(data);
-          }
-        } catch (parseError) {
-          ws.close();
-          reject(new Error('Invalid server response'));
-        }
-      };
-
-      ws.onerror = (error) => {
-        clearTimeout(timeout);
-        ws.close();
-        reject(new Error('Failed to connect to Deriv API. Please try again.'));
-      };
-
-      ws.onclose = (event) => {
-        clearTimeout(timeout);
-        if (!event.wasClean) {
-          reject(new Error('Connection closed unexpectedly'));
-        }
-      };
-    });
+      return data;
+    } catch (err) {
+      console.error('Verification error:', err);
+      throw err;
+    }
   };
 
   const handleTokenLogin = async () => {
@@ -78,7 +48,7 @@ const Login = () => {
 
       const verification = await verifyDerivToken(token);
       
-      if (verification.verify) {
+      if (verification.authorized) {
         localStorage.setItem('derivToken', token);
         localStorage.setItem('accountInfo', JSON.stringify({
           currency: verification.account_list?.[0]?.currency || 'USD',
@@ -147,16 +117,6 @@ const Login = () => {
             {error}
           </div>
         )}
-
-        <div className={styles.footerNote}>
-          <p>If connection issues persist, please:</p>
-          <ul className={styles.troubleshootingList}>
-            <li>Check your internet connection</li>
-            <li>Disable VPN or proxy if used</li>
-            <li>Try a different network</li>
-            <li>Contact your network administrator</li>
-          </ul>
-        </div>
       </div>
     </div>
   );

@@ -1,237 +1,224 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import styles from './Dashboard.module.css';
 
 const Dashboard = () => {
-  const [earningsData, setEarningsData] = useState(null);
+  const [data, setData] = useState({
+    commissions: [],
+    summary: { total: 0, count: 0 }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dateRange, setDateRange] = useState('30d');
+  const [customDates, setCustomDates] = useState({
+    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    end: new Date()
+  });
   const navigate = useNavigate();
 
-  // Helper function to format dates in YYYY-MM-DD format
-  const formatDate = (date) => {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getDateRangeParams = (range) => {
-    const now = new Date();
-    const from = new Date();
-    
-    switch (range) {
-      case '7d':
-        from.setDate(now.getDate() - 7);
-        break;
-      case '30d':
-        from.setDate(now.getDate() - 30);
-        break;
-      case '90d':
-        from.setDate(now.getDate() - 90);
-        break;
-      default:
-        from.setDate(now.getDate() - 30);
-    }
-
-    return {
-      from: formatDate(from),
-      to: formatDate(now)
-    };
-  };
-
-  const fetchEarningsData = async () => {
-    const token = localStorage.getItem('derivToken');
-    if (!token) {
-      navigate('/');
-      return;
-    }
-
+  const fetchCommissions = async (startDate, endDate) => {
     try {
       setLoading(true);
       setError('');
-      
-      const { from, to } = getDateRangeParams(dateRange);
-      
-      const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
-      ws.onopen = () => {
-        // First authorize the connection
-        ws.send(JSON.stringify({
-          authorize: token,
-          req_id: Date.now()
-        }));
-      };
+      const token = localStorage.getItem('derivToken');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
 
-      ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        
-        // Handle authorization response
-        if (data.authorize) {
-          // After authorization, request the statement with properly formatted dates
-          ws.send(JSON.stringify({
-            statement: 1,
-            description: 1,
-            date_from: from,  // Already formatted correctly
-            date_to: to,      // Already formatted correctly
-            req_id: Date.now()
-          }));
-          return;
-        }
+      const response = await fetch('http://localhost:5000/api/deriv-commissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token,
+          date_from: formatDate(startDate),
+          date_to: formatDate(endDate)
+        })
+      });
 
-        // Handle statement response
-        if (data.statement) {
-          const transactions = data.statement.transactions || [];
-          const commissions = transactions.filter(t => t.action_type === 'commission');
-          
-          const totalCommission = commissions.reduce((sum, t) => sum + Math.abs(parseFloat(t.amount)), 0);
-          const currentPeriodCommission = commissions
-            .filter(t => new Date(t.transaction_time) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-            .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount)), 0);
+      const result = await response.json();
 
-          setEarningsData({
-            totalCommission,
-            currentPeriodCommission,
-            transactions: commissions,
-            lastUpdated: new Date().toLocaleString(),
-            dateRange: `${from} to ${to}`
-          });
-          
-          ws.close();
-        }
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch data');
+      }
 
-        if (data.error) {
-          setError(data.error.message);
-          ws.close();
-        }
-      };
-
-      ws.onerror = (err) => {
-        setError('Failed to connect to Deriv API');
-        ws.close();
-      };
-
-      const timeout = setTimeout(() => {
-        ws.close();
-        setError('Connection timeout. Please try again.');
-        setLoading(false);
-      }, 15000);
-
-      ws.onclose = () => {
-        clearTimeout(timeout);
-        setLoading(false);
-      };
-
+      setData(result.data);
     } catch (err) {
       setError(err.message);
+      console.error('Fetch error:', err);
+    } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchEarningsData();
-  }, [dateRange, navigate]);
+  const formatDate = (date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  const handleDateRangeChange = (range) => {
+    setDateRange(range);
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (range) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(now.getDate() - 90);
+        break;
+      case 'custom':
+        return; // Custom dates handled separately
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    fetchCommissions(startDate, now);
+  };
+
+  const handleCustomDateSubmit = () => {
+    setDateRange('custom');
+    fetchCommissions(customDates.start, customDates.end);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('derivToken');
-    localStorage.removeItem('accountInfo');
-    navigate('/');
+    navigate('/login');
   };
 
-  if (loading) return <div className={styles.loading}>Loading commission data...</div>;
-  if (error) return <div className={styles.error}>{error}</div>;
+  useEffect(() => {
+    handleDateRangeChange('30d');
+  }, []);
+
+  if (loading) {
+    return (
+      <div className={styles.loadingContainer}>
+        <div className={styles.spinner}></div>
+        <p>Loading commission data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={styles.errorContainer}>
+        <h3>Error Loading Data</h3>
+        <p>{error}</p>
+        <button 
+          onClick={() => handleDateRangeChange(dateRange)}
+          className={styles.retryButton}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.dashboard}>
       <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Deriv Commissions Dashboard</h1>
-          <p className={styles.subtitle}>Date range: {earningsData?.dateRange || ''}</p>
-        </div>
+        <h1>Deriv Broker Commissions</h1>
         <button onClick={handleLogout} className={styles.logoutButton}>
           Logout
         </button>
       </header>
 
-      <div className={styles.dateFilters}>
-        <button 
-          className={`${styles.dateFilter} ${dateRange === '7d' ? styles.active : ''}`}
-          onClick={() => setDateRange('7d')}
-        >
-          7 Days
-        </button>
-        <button 
-          className={`${styles.dateFilter} ${dateRange === '30d' ? styles.active : ''}`}
-          onClick={() => setDateRange('30d')}
-        >
-          30 Days
-        </button>
-        <button 
-          className={`${styles.dateFilter} ${dateRange === '90d' ? styles.active : ''}`}
-          onClick={() => setDateRange('90d')}
-        >
-          90 Days
-        </button>
+      <div className={styles.controls}>
+        <div className={styles.dateFilters}>
+          <button
+            className={`${styles.filterButton} ${dateRange === '7d' ? styles.active : ''}`}
+            onClick={() => handleDateRangeChange('7d')}
+          >
+            7 Days
+          </button>
+          <button
+            className={`${styles.filterButton} ${dateRange === '30d' ? styles.active : ''}`}
+            onClick={() => handleDateRangeChange('30d')}
+          >
+            30 Days
+          </button>
+          <button
+            className={`${styles.filterButton} ${dateRange === '90d' ? styles.active : ''}`}
+            onClick={() => handleDateRangeChange('90d')}
+          >
+            90 Days
+          </button>
+        </div>
+
+        <div className={styles.customRange}>
+          <DatePicker
+            selected={customDates.start}
+            onChange={(date) => setCustomDates({...customDates, start: date})}
+            selectsStart
+            startDate={customDates.start}
+            endDate={customDates.end}
+            maxDate={new Date()}
+            className={styles.dateInput}
+          />
+          <span>to</span>
+          <DatePicker
+            selected={customDates.end}
+            onChange={(date) => setCustomDates({...customDates, end: date})}
+            selectsEnd
+            startDate={customDates.start}
+            endDate={customDates.end}
+            minDate={customDates.start}
+            maxDate={new Date()}
+            className={styles.dateInput}
+          />
+          <button
+            onClick={handleCustomDateSubmit}
+            className={styles.applyButton}
+          >
+            Apply
+          </button>
+        </div>
       </div>
 
-      {earningsData && (
-        <div className={styles.earningsContainer}>
-          <div className={styles.earningsCard}>
-            <h3>Current Period</h3>
-            <div className={styles.earningsRow}>
-              <span>Commission:</span>
-              <span className={styles.positive}>
-                ${earningsData.currentPeriodCommission.toFixed(2)}
-              </span>
-            </div>
-            <div className={styles.earningsRow}>
-              <span>Transactions:</span>
-              <span>{earningsData.transactions.length}</span>
-            </div>
-          </div>
-
-          <div className={styles.earningsCard}>
-            <h3>All Time</h3>
-            <div className={styles.earningsRow}>
-              <span>Total Commission:</span>
-              <span className={styles.positive}>
-                ${earningsData.totalCommission.toFixed(2)}
-              </span>
-            </div>
-            <div className={styles.earningsRow}>
-              <span>Last Updated:</span>
-              <span>{earningsData.lastUpdated}</span>
-            </div>
-          </div>
+      <div className={styles.summaryCards}>
+        <div className={styles.card}>
+          <h3>Total Commissions</h3>
+          <p className={styles.amount}>${data.summary.total.toFixed(2)}</p>
+          <p>{data.summary.count} transactions</p>
         </div>
-      )}
+        <div className={styles.card}>
+          <h3>Date Range</h3>
+          <p>{new Date(data.summary.date_range.start).toLocaleDateString()}</p>
+          <p>to</p>
+          <p>{new Date(data.summary.date_range.end).toLocaleDateString()}</p>
+        </div>
+      </div>
 
-      <div className={styles.transactionsContainer}>
-        <h3>Recent Commission Transactions</h3>
-        {earningsData?.transactions.length > 0 ? (
-          <table className={styles.transactionsTable}>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Amount</th>
-                <th>Description</th>
+      <div className={styles.commissionsTable}>
+        <h2>Commission Details</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Amount</th>
+              <th>Description</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.commissions.map((commission, index) => (
+              <tr key={index}>
+                <td>{new Date(commission.date).toLocaleDateString()}</td>
+                <td className={styles.amount}>${commission.amount.toFixed(2)}</td>
+                <td>{commission.description}</td>
+                <td className={styles.reference}>{commission.reference}</td>
               </tr>
-            </thead>
-            <tbody>
-              {earningsData.transactions.slice(0, 10).map((txn, index) => (
-                <tr key={index}>
-                  <td>{new Date(txn.transaction_time).toLocaleDateString()}</td>
-                  <td className={styles.positive}>${Math.abs(parseFloat(txn.amount)).toFixed(2)}</td>
-                  <td>{txn.longcode || txn.action_type}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p>No commission transactions found for this period.</p>
-        )}
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
